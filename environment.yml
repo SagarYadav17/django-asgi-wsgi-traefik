@@ -1,4 +1,4 @@
-name: caddy
+name: traefik
 channels:
   - defaults
 dependencies:
