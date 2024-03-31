@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:latest
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web-secure.address=:443"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    volumes:
+      - ./redis_data:/data
+
+  wsgi_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    command: gunicorn config.wsgi -w 2 -b 0.0.0.0 -p 8000
+    restart: unless-stopped
+    environment:
+      - REDIS_ENDPOINT=redis://redis:6379
+    depends_on:
+      - redis
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wsgi.rule=Host(`localhost`)"
+      # - "traefik.http.routers.wsgi.rule=Host(`your-domain.com`)"
+      - "traefik.http.routers.wsgi.entrypoints=web"
+      - "traefik.http.services.wsgi.loadbalancer.server.port=8000"
+
+  asgi_server:
+    build: .
+    command: daphne config.asgi:application -b 0.0.0.0 -p 8001
+    restart: unless-stopped
+    environment:
+      - REDIS_ENDPOINT=redis://redis:6379
+    depends_on:
+      - redis
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.asgi.rule=Host(`localhost`) && Headers(`Connection`, `Upgrade`) && Headers(`Upgrade`, `websocket`)"
+      # - "traefik.http.routers.asgi.rule=Host(`your-domain.com`) && Headers(`Connection`, `Upgrade`) && Headers(`Upgrade`, `websocket`)"
+      - "traefik.http.routers.asgi.entrypoints=web"
+      - "traefik.http.services.asgi.loadbalancer.server.port=8001"

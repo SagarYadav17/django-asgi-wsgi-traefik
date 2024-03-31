@@ -1,0 +1,5 @@
+name: caddy
+channels:
+  - defaults
+dependencies:
+  - python=3.11
